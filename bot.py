@@ -9,22 +9,24 @@ BOT_TOKEN = "8207091935:AAGW2v1pbhycjGOQEbdzqAlvQts-MfRyo4I"
 ADMIN_ID = 7849292154
 
 ALLOWED_FILE = "allowed.json"
+REQUESTS_FILE = "requests.json"
 
 
-def load_allowed():
+def load_json(file):
     try:
-        with open(ALLOWED_FILE) as f:
+        with open(file) as f:
             return json.load(f)
     except:
         return {}
 
 
-def save_allowed(data):
-    with open(ALLOWED_FILE, "w") as f:
+def save_json(file, data):
+    with open(file, "w") as f:
         json.dump(data, f)
 
 
 def send_message(text, keyboard=None):
+
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
     data = {
@@ -35,7 +37,9 @@ def send_message(text, keyboard=None):
     if keyboard:
         data["reply_markup"] = keyboard
 
-    requests.post(url, json=data)
+    r = requests.post(url, json=data)
+
+    return r.json()
 
 
 @app.route("/request_access", methods=["POST"])
@@ -45,6 +49,21 @@ def request_access():
 
     name = data["name"]
     device = data["device"]
+
+    requests_map = load_json(REQUESTS_FILE)
+
+    # удалить предыдущий запрос
+    if device in requests_map:
+
+        message_id = requests_map[device]
+
+        requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage",
+            json={
+                "chat_id": ADMIN_ID,
+                "message_id": message_id
+            }
+        )
 
     text = f"Запрос доступа\n\nИмя: {name}\nDevice: {device}"
 
@@ -57,7 +76,13 @@ def request_access():
         ]
     }
 
-    send_message(text, keyboard)
+    r = send_message(text, keyboard)
+
+    message_id = r["result"]["message_id"]
+
+    requests_map[device] = message_id
+
+    save_json(REQUESTS_FILE, requests_map)
 
     return {"status": "pending"}
 
@@ -65,7 +90,7 @@ def request_access():
 @app.route("/check/<device>")
 def check(device):
 
-    allowed = load_allowed()
+    allowed = load_json(ALLOWED_FILE)
 
     if device in allowed:
         return {"allowed": True}
@@ -78,19 +103,19 @@ def telegram():
 
     update = request.json
 
-    # обработка кнопок
     if "callback_query" in update:
 
         data = update["callback_query"]["data"]
 
-        allowed = load_allowed()
+        allowed = load_json(ALLOWED_FILE)
 
         if data.startswith("allow"):
 
             _, device, name = data.split(":")
 
             allowed[device] = name
-            save_allowed(allowed)
+
+            save_json(ALLOWED_FILE, allowed)
 
             text = f"Доступ разрешён\n{name}"
 
@@ -100,7 +125,8 @@ def telegram():
 
             if device in allowed:
                 del allowed[device]
-                save_allowed(allowed)
+
+            save_json(ALLOWED_FILE, allowed)
 
             text = "Доступ запрещён"
 
@@ -110,7 +136,8 @@ def telegram():
 
             if device in allowed:
                 del allowed[device]
-                save_allowed(allowed)
+
+            save_json(ALLOWED_FILE, allowed)
 
             text = "Доступ отозван"
 
@@ -122,16 +149,13 @@ def telegram():
             }
         )
 
-        return "ok"
-
-    # обработка команд
     if "message" in update:
 
         text = update["message"].get("text", "")
 
         if text == "/users":
 
-            allowed = load_allowed()
+            allowed = load_json(ALLOWED_FILE)
 
             if not allowed:
                 send_message("Нет разрешённых устройств")
