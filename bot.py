@@ -66,3 +66,40 @@ def check(device):
 
 
 app.run(host="0.0.0.0", port=8080)
+
+@app.route("/telegram", methods=["POST"])
+def telegram():
+
+    update = request.json
+
+    if "callback_query" in update:
+
+        data = update["callback_query"]["data"]
+        device = data.split(":")[1]
+
+        allowed = load_allowed()
+
+        if data.startswith("allow"):
+
+            allowed[device] = True
+            save_allowed(allowed)
+
+            text = "Доступ разрешён"
+
+        else:
+
+            if device in allowed:
+                del allowed[device]
+                save_allowed(allowed)
+
+            text = "Доступ запрещён"
+
+        requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/answerCallbackQuery",
+            json={
+                "callback_query_id": update["callback_query"]["id"],
+                "text": text
+            }
+        )
+
+    return "ok"
