@@ -5,7 +5,7 @@ import json
 app = Flask(__name__)
 
 BOT_TOKEN = "8207091935:AAGW2v1pbhycjGOQEbdzqAlvQts-MfRyo4I"
-ADMIN_ID = 0
+ADMIN_ID = 7849292154
 
 allowed_file = "allowed.json"
 
